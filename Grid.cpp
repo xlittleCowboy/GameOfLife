@@ -10,20 +10,23 @@ Grid::~Grid()
 	delete[] CurrentGrid;
 }
 
-Grid::Grid(const sf::Color& AliveCellColor, const sf::Color& DeadCellColor, int CellSize, int Width, int Height)
+Grid::Grid(const sf::Color& AliveCellColor, const sf::Color& DeadCellColor, int CellSize,
+	int Width, int Height, bool RandomCellColor, bool GlitchEffect)
 {
 	srand(time(0));
 
-	// Random cell color!
-	// cellColor = sf::Color(rand() % 255, rand() % 255, rand() % 255);
-
 	this->CellSize = CellSize;
 
-	AliveCell.setFillColor(AliveCellColor);
-	DeadCell.setFillColor(DeadCellColor);
+	this->AliveCellColor = AliveCellColor;
+	this->DeadCellColor = DeadCellColor;
 
-	AliveCell.setSize(sf::Vector2f(CellSize, CellSize));
-	DeadCell.setSize(sf::Vector2f(CellSize, CellSize));
+	this->RandomCellColor = RandomCellColor;
+	this->GlitchEffect = GlitchEffect;
+
+	if (RandomCellColor)
+	{
+		this->AliveCellColor = sf::Color(rand() % 255, rand() % 255, rand() % 255);
+	}
 
 	Rows = Height / CellSize;
 	Columns = Width / CellSize;
@@ -36,8 +39,6 @@ Grid::Grid(const sf::Color& AliveCellColor, const sf::Color& DeadCellColor, int 
 		CurrentGrid[i] = new sf::RectangleShape[Columns];
 		OldGrid[i] = new sf::RectangleShape[Columns];
 	}
-
-	ClearGrid();
 }
 
 void Grid::ClearGrid()
@@ -46,9 +47,11 @@ void Grid::ClearGrid()
 	{
 		for (int j = 0; j < Columns; j++)
 		{
-			DeadCell.setPosition(j * DeadCell.getSize().x, i * DeadCell.getSize().y);
-			CurrentGrid[i][j] = DeadCell;
-			OldGrid[i][j] = DeadCell;
+			CurrentGrid[i][j].setPosition(sf::Vector2f(j * CellSize, i * CellSize));
+			CurrentGrid[i][j].setSize(sf::Vector2f(CellSize, CellSize));
+			CurrentGrid[i][j].setFillColor(DeadCellColor);
+
+			OldGrid[i][j] = CurrentGrid[i][j];
 		}
 	}
 }
@@ -59,8 +62,10 @@ void Grid::DrawGrid(sf::RenderWindow& Window)
 	{
 		for (int j = 0; j < Columns; j++)
 		{
-			// Glitch Effect!
-			// grid[i][j].setFillColor(sf::Color(rand() % 255, rand() % 255, rand() % 255)); 
+			if (GlitchEffect)
+			{
+				OldGrid[i][j].setFillColor(sf::Color(rand() % 255, rand() % 255, rand() % 255)); 
+			}
 
 			CurrentGrid[i][j] = OldGrid[i][j];
 			Window.draw(CurrentGrid[i][j]);
@@ -70,15 +75,14 @@ void Grid::DrawGrid(sf::RenderWindow& Window)
 
 bool Grid::IsCellAlive(int X, int Y)
 {
-	return CurrentGrid[X][Y].getFillColor() == AliveCell.getFillColor();
+	return CurrentGrid[X][Y].getFillColor() == AliveCellColor;
 }
 
-void Grid::SetCellOnGrid(sf::RectangleShape Cell, int X, int Y)
+void Grid::SetCellOnGrid(sf::Color CellColor, int X, int Y)
 {
 	if (X >= Columns || Y >= Rows) return;
 
-	Cell.setPosition(X * Cell.getSize().x, Y * Cell.getSize().y);
-	OldGrid[X][Y] = Cell;
+	OldGrid[Y][X].setFillColor(CellColor);
 }
 
 void Grid::SpawnStartCells(int StartSpawnChance)
@@ -89,7 +93,7 @@ void Grid::SpawnStartCells(int StartSpawnChance)
 		{
 			if (rand() % 100 <= StartSpawnChance)
 			{
-				SetCellOnGrid(AliveCell, i, j);
+				SetCellOnGrid(AliveCellColor, j, i);
 			}
 		}
 	}
@@ -109,14 +113,14 @@ void Grid::CheckCells()
 			{
 				if (NeighbourCellsCount == 3)
 				{
-					SetCellOnGrid(AliveCell, i, j);
+					SetCellOnGrid(AliveCellColor, j, i);
 				}
 			}
 			else if (IsCellAlive(i, j))
 			{
 				if (NeighbourCellsCount < 2 || NeighbourCellsCount > 3)
 				{
-					SetCellOnGrid(DeadCell, i, j);
+					SetCellOnGrid(DeadCellColor, j, i);
 				}
 			}
 		}
@@ -150,14 +154,15 @@ int Grid::CountNeighbourCells(int X, int Y)
 	return CellsCount;
 }
 
-void Grid::UpdateGrid(const sf::Event& Event, float UpdateDelay)
+void Grid::UpdateGrid(const sf::Event& Event, float UpdateDelay, sf::RenderWindow& Window)
 {
 	if (sf::Mouse::isButtonPressed(sf::Mouse::Left))
 	{
-		sf::Vector2i MousePosition(Event.mouseMove.x, Event.mouseMove.y);
-		MousePosition.x /= GetCellSize();
-		MousePosition.y /= GetCellSize();
-		SetCellOnGrid(AliveCell, MousePosition.x, MousePosition.y);
+		sf::Vector2f MousePosition(Event.mouseMove.x, Event.mouseMove.y);
+
+		MousePosition.x /= CellSize;
+		MousePosition.y /= CellSize;
+		SetCellOnGrid(AliveCellColor, MousePosition.x, MousePosition.y);
 	}
 	else
 	{
@@ -167,4 +172,12 @@ void Grid::UpdateGrid(const sf::Event& Event, float UpdateDelay)
 			Clock.restart();
 		}
 	}
+
+	DrawGrid(Window);
+}
+
+void Grid::Restart(int StartSpawnChance)
+{
+	ClearGrid();
+	SpawnStartCells(StartSpawnChance);
 }
